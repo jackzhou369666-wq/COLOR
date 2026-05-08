@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>随机双色对比生成器</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    transition: background 0.5s;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 900px;
+    padding: 24px;
+  }
+
+  h1 {
+    text-align: center;
+    color: #e0e0e0;
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 28px;
+    letter-spacing: 0.02em;
+  }
+
+  .panels {
+    display: flex;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+
+  .panel {
+    flex: 1;
+    height: 340px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+    transition: flex 0.4s ease;
+    min-width: 0;
+  }
+
+  .panel:hover { flex: 1.15; }
+
+  .panel-lock {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    background: transparent;
+    color: inherit;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    transition: all 0.2s;
+  }
+
+  .panel-lock:hover, .panel-lock.locked { opacity: 1; }
+  .panel-lock.locked { background: currentColor; }
+  .panel-lock.locked::before { content: '🔒'; }
+
+  .hex-code {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    user-select: all;
+    margin-bottom: 4px;
+  }
+
+  .copy-hint {
+    font-size: 0.75rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .panel:hover .copy-hint { opacity: 0.7; }
+
+  .toolbar {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+  }
+
+  .btn-generate {
+    background: #6c5ce7;
+    color: #fff;
+    font-size: 1.05rem;
+    padding: 14px 40px;
+  }
+  .btn-generate:hover { background: #5a4bd1; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(108,92,231,0.4); }
+  .btn-generate:active { transform: translateY(0); }
+
+  .btn-swap {
+    background: rgba(255,255,255,0.08);
+    color: #ccc;
+  }
+  .btn-swap:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+  .info-card {
+    margin-top: 24px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 20px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  .ratio-display {
+    text-align: center;
+  }
+
+  .ratio-number {
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  .ratio-label {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 2px;
+  }
+
+  .wcag-results {
+    display: flex;
+    gap: 24px;
+  }
+
+  .wcag-item {
+    text-align: center;
+  }
+
+  .wcag-grade {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+  }
+
+  .wcag-grade.pass { background: #00b894; color: #fff; }
+  .wcag-grade.fail { background: rgba(255,255,255,0.08); color: #888; }
+
+  .wcag-desc {
+    font-size: 0.72rem;
+    color: #999;
+  }
+
+  .tip {
+    text-align: center;
+    color: #666;
+    font-size: 0.8rem;
+    margin-top: 18px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: #333;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>随机双色对比生成器</h1>
+
+  <div class="panels" id="panels">
+    <div class="panel" id="panel-fg" data-role="fg">
+      <button class="panel-lock" id="lock-fg" title="锁定前景色">🔓</button>
+      <span class="hex-code" id="hex-fg"></span>
+      <span class="copy-hint">点击复制</span>
+    </div>
+    <div class="panel" id="panel-bg" data-role="bg">
+      <button class="panel-lock" id="lock-bg" title="锁定背景色">🔓</button>
+      <span class="hex-code" id="hex-bg"></span>
+      <span class="copy-hint">点击复制</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn-generate" id="btn-generate">🎲 随机生成</button>
+    <button class="btn-swap" id="btn-swap">🔄 交换颜色</button>
+  </div>
+
+  <div class="info-card">
+    <div class="ratio-display">
+      <div class="ratio-number" id="ratio-value">--</div>
+      <div class="ratio-label">对比度</div>
+    </div>
+    <div class="wcag-results">
+      <div class="wcag-item">
+        <div class="wcag-grade" id="wcag-aa-norm">AA 正文</div>
+        <div class="wcag-desc">≥ 4.5:1</div>
+      </div>
+      <div class="wcag-item">
+        <div class="wcag-grade" id="wcag-aa-large">AA 大字</div>
+        <div class="wcag-desc">≥ 3:1</div>
+      </div>
+      <div class="wcag-item">
+        <div class="wcag-grade" id="wcag-aaa-norm">AAA 正文</div>
+        <div class="wcag-desc">≥ 7:1</div>
+      </div>
+      <div class="wcag-item">
+        <div class="wcag-grade" id="wcag-aaa-large">AAA 大字</div>
+        <div class="wcag-desc">≥ 4.5:1</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="tip">按 <kbd>空格键</kbd> 随机生成 &nbsp;|&nbsp; 点击色块复制色值</p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const panelFg = document.getElementById('panel-fg');
+  const panelBg = document.getElementById('panel-bg');
+  const hexFg = document.getElementById('hex-fg');
+  const hexBg = document.getElementById('hex-bg');
+  const lockFg = document.getElementById('lock-fg');
+  const lockBg = document.getElementById('lock-bg');
+  const ratioValue = document.getElementById('ratio-value');
+  const toast = document.getElementById('toast');
+
+  let locked = { fg: false, bg: false };
+  let currentFg, currentBg;
+
+  function randomHex() {
+    return '#' + [0,0,0,0,0,0].map(() =>
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('');
+  }
+
+  function hexToRgb(hex) {
+    const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    return m ? [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)] : [0,0,0];
+  }
+
+  function relativeLuminance([r,g,b]) {
+    const c = [r,g,b].map(v => { v /= 255; return v <= 0.03928 ? v/12.92 : ((v+0.055)/1.055)**2.4; });
+    return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+  }
+
+  function contrastRatio(hex1, hex2) {
+    const l1 = relativeLuminance(hexToRgb(hex1));
+    const l2 = relativeLuminance(hexToRgb(hex2));
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function bestTextColor(bgHex) {
+    const [r,g,b] = hexToRgb(bgHex);
+    const l = relativeLuminance([r,g,b]);
+    return l > 0.179 ? '#1a1a2e' : '#ffffff';
+  }
+
+  function setPanel(panel, hexEl, hex) {
+    panel.style.backgroundColor = hex;
+    const txt = bestTextColor(hex);
+    panel.style.color = txt;
+    hexEl.textContent = hex.toUpperCase();
+  }
+
+  function updateRatio() {
+    const ratio = contrastRatio(currentFg, currentBg);
+    ratioValue.textContent = ratio.toFixed(2) + ':1';
+
+    const grades = [
+      ['wcag-aa-norm', ratio >= 4.5],
+      ['wcag-aa-large', ratio >= 3],
+      ['wcag-aaa-norm', ratio >= 7],
+      ['wcag-aaa-large', ratio >= 4.5],
+    ];
+
+    grades.forEach(([id, pass]) => {
+      const el = document.getElementById(id);
+      el.textContent = ['AA 正文','AA 大字','AAA 正文','AAA 大字'][grades.findIndex(g => g[0] === id)];
+      el.className = 'wcag-grade ' + (pass ? 'pass' : 'fail');
+    });
+
+    const passCount = grades.filter(g => g[1]).length;
+    ratioValue.style.color = passCount === 4 ? '#00b894' : passCount >= 2 ? '#fdcb6e' : '#e17055';
+  }
+
+  function generate() {
+    if (!locked.fg) currentFg = randomHex();
+    if (!locked.bg) currentBg = randomHex();
+    applyColors();
+  }
+
+  function applyColors() {
+    setPanel(panelFg, hexFg, currentFg);
+    setPanel(panelBg, hexBg, currentBg);
+    updateRatio();
+  }
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.remove('show'), 1500);
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('已复制 ' + text.toUpperCase());
+    } catch {
+      showToast('复制失败，请手动选择');
+    }
+  }
+
+  panelFg.addEventListener('click', (e) => {
+    if (e.target === lockFg) return;
+    copyToClipboard(currentFg);
+  });
+
+  panelBg.addEventListener('click', (e) => {
+    if (e.target === lockBg) return;
+    copyToClipboard(currentBg);
+  });
+
+  lockFg.addEventListener('click', (e) => {
+    e.stopPropagation();
+    locked.fg = !locked.fg;
+    lockFg.classList.toggle('locked', locked.fg);
+    lockFg.textContent = locked.fg ? '🔒' : '🔓';
+    lockFg.title = locked.fg ? '解锁前景色' : '锁定前景色';
+  });
+
+  lockBg.addEventListener('click', (e) => {
+    e.stopPropagation();
+    locked.bg = !locked.bg;
+    lockBg.classList.toggle('locked', locked.bg);
+    lockBg.textContent = locked.bg ? '🔒' : '🔓';
+    lockBg.title = locked.bg ? '解锁背景色' : '锁定背景色';
+  });
+
+  document.getElementById('btn-generate').addEventListener('click', generate);
+  document.getElementById('btn-swap').addEventListener('click', () => {
+    [currentFg, currentBg] = [currentBg, currentFg];
+    [locked.fg, locked.bg] = [locked.bg, locked.fg];
+    lockFg.classList.toggle('locked', locked.fg);
+    lockFg.textContent = locked.fg ? '🔒' : '🔓';
+    lockBg.classList.toggle('locked', locked.bg);
+    lockBg.textContent = locked.bg ? '🔒' : '🔓';
+    applyColors();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target === document.body) {
+      e.preventDefault();
+      generate();
+    }
+  });
+
+  // Initial
+  generate();
+</script>
+</body>
+</html>
